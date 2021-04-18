@@ -8,8 +8,7 @@ translator = Translator()
 import time
 from path import Path
 from bs4 import BeautifulSoup
-from transformers import pipeline
-from transformers import MarianMTModel, MarianTokenizer
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 options = Options()
