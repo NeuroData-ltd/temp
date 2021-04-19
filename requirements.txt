@@ -1,0 +1,8 @@
+streamlit
+path
+transformers
+googletrans==3.1.0a0
+requests
+streamlit-tags
+selenium
+bs4
