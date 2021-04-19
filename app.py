@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_tags import st_tags,st_tags_sidebar
 import base64
 import requests
 from googletrans import Translator
@@ -182,7 +181,7 @@ nb_words = st.sidebar.number_input("",
 
 
 st.sidebar.subheader("Enter Keyword:")
-keywords = st_tags_sidebar("", "Press enter to add more", ["Writup", "SEO", "rédaction"])
+keywords = st.sidebar.text("")
 
 st.sidebar.subheader("""add additional description:""")
 text = st.sidebar.text_area(label="",height=200)
