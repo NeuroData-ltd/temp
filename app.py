@@ -71,9 +71,7 @@ def img_to_bytes(img_path):
     img_bytes = Path(img_path).read_bytes()
     encoded = base64.b64encode(img_bytes).decode()
     return encoded
-st.set_page_config(
-    page_title="Writup AI", layout="wide", page_icon="./images/writup.png"
-)
+st.set_page_config(page_title="Writup AI", layout="wide", page_icon="./images/writup.png")
 
 
 def samples_display(text):
