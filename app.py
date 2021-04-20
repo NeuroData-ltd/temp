@@ -29,11 +29,13 @@ def get_links(search_string,browserDriver='./chromedriver'):
 
     browser.get("https://www.google.com/search?q=" +
                 search_string + "&start=" + str(0))
+    time.sleep(3)
     listOflinks = []
     els = browser.find_elements_by_xpath("//div[@class='yuRUbf']")
     for el in els:
         url = el.find_element_by_tag_name('a')
         listOflinks.append(url.get_property('href'))
+    time.sleep(3)
     # filter links
     for link in listOflinks:
         if "linkedin" in link or "facebook" in link or "twitter" in link or "instagram" in link:
