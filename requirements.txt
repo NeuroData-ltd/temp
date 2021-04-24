@@ -6,3 +6,7 @@ requests
 streamlit-tags
 selenium
 bs4
+sklearn
+gensim
+numpy
+urllib3
