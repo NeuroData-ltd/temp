@@ -10,3 +10,4 @@ sklearn
 gensim
 numpy
 urllib3
+sumy
