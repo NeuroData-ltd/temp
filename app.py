@@ -1,8 +1,33 @@
 import streamlit as st
-import base64
 from streamlit_tags import st_tags,st_tags_sidebar
+import re
+import urllib.request as urllib2
+from bs4 import BeautifulSoup
+import warnings
+from googletrans import Translator
+translator = Translator()
+
+
+# The different ways to summarize
+from sumy.summarizers.lsa import LsaSummarizer as lsa
+from sumy.summarizers.edmundson import EdmundsonSummarizer as edm
+from sumy.summarizers.luhn import LuhnSummarizer as luhn
+from sumy.summarizers.lex_rank import LexRankSummarizer as lex
+
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.nlp.stemmers import Stemmer
+from sumy.utils import get_stop_words
+from sklearn.cluster import KMeans
+import numpy as np
+from gensim.models import doc2vec
+from collections import namedtuple
+from gensim.models.word2vec import LineSentence
+import base64
 import requests
 from googletrans import Translator
+import re
+
 translator = Translator()
 
 import time
@@ -13,69 +38,185 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 options = Options()
 options.add_argument("--headless")
-chrome_options.add_argument('--disable-gpu')
-chrome_options.add_argument('--no-sandbox')
+opener = urllib2.build_opener()
+opener.addheaders = [('User-agent', 'Mozilla/5.0')]
 
-def get_links(search_string,browserDriver='./chromedriver'):
+def get_links(search_string,lang,browserDriver='./chromedriver'):
 
-    # This is done to structure the string
-    # into search url.(This can be ignored)
-    search_string = search_string.replace(' ', '+')
-
-    # Assigning the browser variable with chromedriver of Chrome.
-    # Any other browser and its respective webdriver
-    # like geckodriver for Mozilla Firefox can be used
-    browser = webdriver.Chrome(browserDriver,options=options)
-
-    browser.get("https://www.google.com/search?q=" +
-                search_string + "&start=" + str(0))
-    time.sleep(3)
+    d = {"ar":"com.sa","en":"com","fr":"fr"}
     listOflinks = []
-    els = browser.find_elements_by_xpath("//div[@class='yuRUbf']")
-    for el in els:
-        url = el.find_element_by_tag_name('a')
-        listOflinks.append(url.get_property('href'))
-    time.sleep(3)
-    # filter links
-    for link in listOflinks:
-        if "linkedin" in link or "facebook" in link or "twitter" in link or "instagram" in link:
-            listOflinks.remove(link)
-    listOflinks = list(set(listOflinks))
+    for i in [0,1]:
+        # This is done to structure the string
+        # into search url.(This can"https://google." be ignored)
+        search_string = search_string.replace(' ', '+')
+
+        # Assigning the browser variable with chromedriver of Chrome.
+        # Any other browser and its respective webdriver
+        # like geckodriver for Mozilla Firefox can be used
+        browser = webdriver.Chrome(browserDriver,options=options)
+
+        browser.get("https://www.google."+d[lang]+"/search?q=" +
+                search_string + "&start=" + str(i))
+
+        els = browser.find_elements_by_xpath("//div[@class='yuRUbf']")
+        for el in els:
+            url = el.find_element_by_tag_name('a')
+            listOflinks.append(url.get_property('href'))
     return(listOflinks)
 
-def get_text(lisOflinks,output=''):
-    n_l = len(lisOflinks)
-    texts = []
+    # Extract only url website
+def extraction_reg(listOflinks):
+    urls = []
+    for url in listOflinks:
+        m = re.search(r'[^& ]+', url)
+        s = m.group()
+        res = s.replace('/url?q=', '')
+        urls.append(url)
+    return urls
+def classify_paragraph(lst_para, k):
+    # Transform data
+    docs = []
+    analyzedDocument = namedtuple('AnalyzedDocument', 'words tags')
+    for i, text in enumerate(lst_para):
+        try:
+            text = str(text)
+            words = text.lower().split()
+            tags = [i]
+            docs.append(analyzedDocument(words, tags))
+        except:
+            pass
 
+    # Train model
+    model = doc2vec.Doc2Vec(docs, vector_size=100, window=300, min_count=1, workers=8)
 
-    #for i in range(n_l):
-    try:
-        res = requests.get(lisOflinks[0])
-        html_page = res.content
-        soup = BeautifulSoup(html_page, 'html.parser')
-        text = soup.find_all(text=True)
-        for t in text:
-            if t.parent.name == "p":
-                output += '{} '.format(t)
-        words = output.split(" ")
-        output = " ".join(words)
-        texts.append(output)
+    lst_sent2vec = [model.docvecs[i] for i in range(len(lst_para))]
 
-    except:
-        print("")
+    # Choose number of groups
+    nb_clusters = k
+    kmeans = KMeans(n_clusters=nb_clusters, random_state=0).fit(lst_sent2vec)
+    lb_lst_idx = kmeans.labels_
 
-    return(" ".join(texts))
+    # Dictionnary creation
+    dic_paragraph = {}
+    for i in range(nb_clusters):
 
+        idx = np.where(lb_lst_idx == i)[0]
 
+        s = ''
+        for e in idx:
+            s = s + lst_para[e]
+            dic_paragraph[i] = s
 
+    return dic_paragraph
 
+def clean_lst(lst):
+    new_lst = []
+    for e in lst:
+        if (e.find('youtube') == -1 and e.find('forum') == -1 and e.find('amazon') == -1 and e.find('linguee') == -1
+                and e.find('books') == -1 and e.find('facebook') == -1 and e.find('instagram') == -1 and e.find('linkedin') == -1 and e.find("twitter") ==-1):
+            new_lst.append(e)
+    return new_lst
 
+def sumy_fun(text, lang, method):
+    sumy_method_dict = {'lsa': lsa, 'edm': edm, 'luhn': luhn, 'lex': lex}
+    if 'en' in lang:
+        lang = 'en'
+    lang_dict = {'fr': 'french', 'es': 'spanish', 'de': 'german', 'en': 'english'}
+    Summarizer = sumy_method_dict[method]
 
+    summary = ''
+    LANGUAGE = lang_dict[lang]
+    nb_sentence = len(text.split('.'))
+    SENTENCES_COUNT = int(nb_sentence * 0.50)
+    parser = PlaintextParser.from_string(text, Tokenizer(LANGUAGE))
+    stemmer = Stemmer(LANGUAGE)
+
+    summarizer = Summarizer(stemmer)
+    summarizer.stop_words = get_stop_words(LANGUAGE)
+
+    for sentence in summarizer(parser.document, SENTENCES_COUNT):
+        summary = summary + ' ' + str(sentence)
+
+    return summary
+
+def clean_txt_content(lst):
+    clean_lst = []
+    for i in range(len(lst)):
+        if lst[i].get_text() == '' or len(lst[i].get_text()) < 75:
+            pass
+        else :
+            c = lst[i].get_text()
+            c1 = c.replace('\n', ' ')
+            c2 = c1.replace('\xa0', ' ')
+            c3 = c2.replace("\\", '')
+            c4 = c3.replace('\r', '')
+            clean_lst.append(c4)
+    return clean_lst
+def scrap_txt_content(lst_url):
+    lst_content = []
+    for url in lst_url:
+        try :
+            quote_page = url
+            page = urllib2.urlopen(quote_page)
+            soup = BeautifulSoup(page, 'html.parser')
+            lst_cont = soup.find_all('p')
+            p = clean_txt_content(lst_cont)
+            s = ''
+            for i in p:
+                s = s + i
+            s1 = s.replace(' ','')
+            # Not enough content, then we don't keep
+            lst_content.append(p)
+        except:
+            pass
+    return lst_content
+# Delete paragraphs containing elements in the reject_elem list
+def is_txt_contain_unwanted_string(s):
+    reject_elem = ['@', '®', '©', 'http', '//',"|"]
+    if any(x in s for x in reject_elem): #or bool(re.match(' [A-Z].* [A-Z].*$', s)):
+        return True
+    else:
+        return False
+
+# Function returning all paragraphs to be classified with K-Means
+def create_lst_paragraph(lst):
+    lst_para = []
+    for i in range(len(lst)):
+        for j in lst[i]:
+            if is_txt_contain_unwanted_string(j):
+                pass
+            else:
+                lst_para.append(j)
+    return lst_para
+# and extracts the most SENTENCES_COUNT important sentences
+def sumy_fun(text, lang, method):
+    sumy_method_dict = {'lsa': lsa, 'edm': edm, 'luhn': luhn, 'lex': lex}
+    if 'en' in lang:
+        lang = 'en'
+    lang_dict = {'fr': 'french', 'es': 'spanish', 'de': 'german', 'en': 'english'}
+    Summarizer = sumy_method_dict[method]
+
+    summary = ''
+    LANGUAGE = lang_dict[lang]
+    nb_sentence = len(text.split('.'))
+    SENTENCES_COUNT = int(nb_sentence * 0.50)
+    parser = PlaintextParser.from_string(text, Tokenizer(LANGUAGE))
+    stemmer = Stemmer(LANGUAGE)
+
+    summarizer = Summarizer(stemmer)
+    summarizer.stop_words = get_stop_words(LANGUAGE)
+
+    for sentence in summarizer(parser.document, SENTENCES_COUNT):
+        summary = summary + ' ' + str(sentence)
+
+    return summary
 def img_to_bytes(img_path):
     img_bytes = Path(img_path).read_bytes()
     encoded = base64.b64encode(img_bytes).decode()
     return encoded
-st.set_page_config(page_title="Writup AI", layout="wide", page_icon="./images/writup.png")
+st.set_page_config(
+    page_title="Writup AI", layout="wide", page_icon="./images/writup.png"
+)
 
 
 def samples_display(text):
@@ -192,20 +333,35 @@ c1,c2,c3 = st.sidebar.beta_columns(3)
 Gen = c2.button("Generate Text")
 
 search_string = " ".join(keywords) + text
-search_string = translator.translate(search_string, dest="en")
-
 
 
 if Gen:
 
-    listOflinks = get_links(search_string.text)
-
-    text = get_text(listOflinks)
-    te = text.split(".")
+    listOflinks = get_links(search_string,lang)
+    ex_reg = extraction_reg(listOflinks)
+    clean_list = clean_lst(ex_reg)
+    text_content = scrap_txt_content(clean_list)
+    parag = create_lst_paragraph(text_content)
+    dic_paragraph = classify_paragraph(parag, 14)
     out = ""
-    for tt in te:
-        fr_text = translator.translate(tt, dest="fr")
-        out+=fr_text.text
+    for i in range(len(dic_paragraph)):
+        para = dic_paragraph[i]
+
+        # remove doublon sentences
+        para_lst = para.split('.')
+        tmp = set(para_lst)
+        para_lst = list(tmp)
+
+        clean_para = ''
+        for e in para:
+            clean_para = clean_para + e
+
+        if len(sumy_fun(clean_para, "en", "lsa")) < 100:
+            out+='...'
+        else:
+            t = sumy_fun(clean_para, "en", "lsa")
+            out+=t
+
     st.text_area(label="",value=out,height=500)
 
 
