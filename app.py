@@ -142,7 +142,7 @@ def sumy_fun(text, lang, method):
 def clean_txt_content(lst):
     clean_lst = []
     for i in range(len(lst)):
-        if lst[i].get_text() == '' or len(lst[i].get_text()) < 75:
+        if lst[i].get_text() == '' or len(lst[i].get_text()) < 300:
             pass
         else :
             c = lst[i].get_text()
