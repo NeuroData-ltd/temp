@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup
 import warnings
 from googletrans import Translator
 translator = Translator()
-import introduction
 
 # The different ways to summarize
 from sumy.summarizers.lsa import LsaSummarizer as lsa
